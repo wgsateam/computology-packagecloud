@@ -2,18 +2,13 @@
 
 Facter.add('pygpgme_installed') do
   setcode do
-    os = Facter.value(:operatingsystem).downcase
+    osfamily = Facter.value(:osfamily)
 
-    case os
-    when /debian|ubuntu|windows/
-      'true'
-    else
+    if osfamily == 'RedHat'
       output = Facter::Core::Execution.exec('rpm -q pygpgme')
-      if output.start_with?('pygpgme')
-        'true'
-      else
-        'false'
-      end
+      output && output.start_with?('pygpgme') ? 'true' : 'false'
+    else
+      'false' # Default to false for non-RedHat systems
     end
   end
 end
