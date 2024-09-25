@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 #
 # Author: Joe Damato
 # Module Name: packagecloud
@@ -17,17 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-require "uri"
+require 'uri'
 
 module Puppet::Parser::Functions
-  newfunction(:build_base_url, :type => :rvalue) do |args|
-    read_token = args[0]
-    server_address = args[1]
+  newfunction(:build_base_url, type: :rvalue) do |args|
+    read_token, server_address = args
 
     uri = URI(server_address)
     uri.user = read_token
-    uri.password = ''
+    uri.password = nil # Nil is clearer when you don't want any password value
 
     uri.to_s
   end
