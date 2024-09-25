@@ -1,6 +1,7 @@
+# frozen_string_literal: true
+
 Facter.add('osreleasemaj') do
   setcode do
-    os_str = Facter.value(:operatingsystemrelease)
-    os_str.split('.').first
+    Facter.value(:operatingsystemrelease)&.split('.')&.first
   end
 end
