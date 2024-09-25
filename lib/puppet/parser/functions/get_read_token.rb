@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 #
 # Author: Joe Damato
 # Module Name: packagecloud
@@ -18,9 +19,9 @@
 # limitations under the License.
 #
 
-require "uri"
+require 'uri'
 require 'net/http'
-require "net/https"
+require 'net/https'
 
 module Packagecloud
   class API
@@ -32,35 +33,29 @@ module Packagecloud
       @os           = os
       @dist         = dist
       @hostname     = hostname
-      @base_url     = "https://packagecloud.io/install/repositories/"
-
-      if !server_address.nil?
-        @base_url = URI.join(server_address, "/install/repositories/").to_s
-      end
+      @base_url     = server_address ? URI.join(server_address, '/install/repositories/').to_s : 'https://packagecloud.io/install/repositories/'
 
       @endpoint_params = {
-        :os   => os,
-        :dist => dist,
-        :name => hostname
+        os: os,
+        dist: dist,
+        name: hostname
       }
     end
 
     def repo_name
-      @name.gsub('/', '_')
+      @name.tr('/', '_')  # Using `tr` instead of `gsub` for better performance
     end
 
     def rpm_base_url
-      @rpm_base_url ||= master_rpm_base_url.dup.tap do |uri|
-        uri.user = read_token
-      end
+      @rpm_base_url ||= master_rpm_base_url.dup.tap { |uri| uri.user = read_token }
     end
 
     def master_rpm_base_url
-      @master_rpm_base_url ||= URI(get(uri_for("rpm_base_url"), @endpoint_params).body.chomp)
+      @master_rpm_base_url ||= URI(get(uri_for('rpm_base_url'), @endpoint_params).body.chomp)
     end
 
     def read_token
-      @read_token ||= post(uri_for("tokens.text"), @endpoint_params).body.chomp
+      @read_token ||= post(uri_for('tokens.text'), @endpoint_params).body.chomp
     end
 
     def uri_for(resource)
@@ -71,55 +66,38 @@ module Packagecloud
 
     def get(uri, params)
       uri.query = URI.respond_to?(:encode_www_form) ? URI.encode_www_form(params) : params.to_param
-      request   = Net::HTTP::Get.new(uri.request_uri)
+      request   = Net::HTTP::Get.new(uri)
 
-      if uri.user
-        request.basic_auth uri.user.to_s, uri.password.to_s
-      end
-
-      http(uri.host, uri.port, request)
+      request.basic_auth(uri.user.to_s, uri.password.to_s) if uri.user
+      http_request(uri, request)
     end
 
     def post(uri, params)
-      request = Net::HTTP::Post.new(uri.request_uri)
-      request.form_data = params
+      request = Net::HTTP::Post.new(uri)
+      request.set_form_data(params)
 
-      if uri.user
-        request.basic_auth uri.user.to_s, uri.password.to_s
-      end
-
-      http(uri.scheme, uri.host, uri.port, request)
+      request.basic_auth(uri.user.to_s, uri.password.to_s) if uri.user
+      http_request(uri, request)
     end
 
-    def http(scheme, host, port, request)
-      http = Net::HTTP.new(host, port)
-      if scheme == "https"
-        http.verify_mode = OpenSSL::SSL::VERIFY_PEER
-        http.use_ssl = true
-        store = OpenSSL::X509::Store.new
-        store.set_default_paths
-        http.cert_store = store
-      end
+    private
 
-      case res = http.start { |http| http.request(request) }
-      when Net::HTTPSuccess, Net::HTTPRedirection
-        res
-      else
-        res.error!
+    def http_request(uri, request)
+      Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https', verify_mode: OpenSSL::SSL::VERIFY_PEER) do |http|
+        http.request(request).tap do |res|
+          raise res.error! unless res.is_a?(Net::HTTPSuccess) || res.is_a?(Net::HTTPRedirection)
+        end
       end
     end
   end
 end
 
 module Puppet::Parser::Functions
-  newfunction(:get_read_token, :type => :rvalue) do |args|
-    repo = args[0]
-    master_token = args[1]
-    server_address = args[2]
-
-    os = lookupvar('::operatingsystem').downcase
-    dist = lookupvar('::operatingsystemrelease')
-    hostname = lookupvar('::fqdn')
+  newfunction(:get_read_token, type: :rvalue) do |args|
+    repo, master_token, server_address = args
+    os        = lookupvar('::operatingsystem').downcase
+    dist      = lookupvar('::operatingsystemrelease')
+    hostname  = lookupvar('::fqdn')
 
     Packagecloud::API.new(repo, master_token, server_address, os, dist, hostname).read_token
   end
